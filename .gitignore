@@ -1,0 +1,21 @@
+# Private/LAN camera credentials — never commit
+camera.local.json
+devices.json
+*.jsonl
+devices_seen.json
+
+# Python
+__pycache__/
+*.py[cod]
+
+# GeoIP cache
+GeoLite2-Country-CSV*
+geoip/.zip
+
+# Secrets/env
+*.env
+.env
+deploy/rc.local
+ssh keys/**
+*.pem
+*.key

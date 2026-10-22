@@ -1,0 +1,52 @@
+# Deployment for https://p2pipcam.com-style hosting.
+# Host networking is required: the server must see the real source address of
+# every phone/camera to answer discovery and relay packets.
+#
+# Required env (put them in a .env file next to this file, never committed):
+#   MAXMIND_URL   - GeoLite2 CSV download URL, see
+#                   https://support.maxmind.com/hc/en-us/articles/30627963892187
+#   PUBLIC_HOST   - Hostname phones and cameras resolve to reach this server
+#                   (must be a plain DNS A record; no UDP is not passed by CDNs)
+services:
+  server:
+    build: .
+    image: p2pipcam:latest
+    network_mode: host
+    restart: unless-stopped
+    command: ["python3", "p2p_server.py", "--public-host", "${PUBLIC_HOST}",
+              "--admin-bind", "0.0.0.0", "--admin-port", "9090",
+              "--device-log", "/data/devices_log.jsonl",
+              "--seen-db", "/data/devices_seen.json",
+              "--geoip-dir", "/geoip"]
+    volumes:
+      - device-data:/data
+      - geoip-data:/geoip
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:9090/api/health', timeout=5)"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+
+  cloud:
+    image: p2pipcam:latest
+    network_mode: host
+    restart: unless-stopped
+    # Responds to the camera's registration on TCP/UDP 80; "source" = echo the
+    # camera's public IP back.
+    command: ["python3", "fake_cloud.py", "--port", "80", "--body", "source",
+              "--save", "/data/registrations.jsonl"]
+    volumes:
+      - cloud-data:/data
+
+  geoip:
+    image: p2pipcam:latest
+    restart: unless-stopped
+    command: ["python3", "download_geoip.py", "--url", "${MAXMIND_URL}",
+              "--dir", "/geoip", "--days", "14", "--check-every", "3600"]
+    volumes:
+      - geoip-data:/geoip
+
+volumes:
+  cloud-data:
+  device-data:
+  geoip-data:
