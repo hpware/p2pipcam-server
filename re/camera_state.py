@@ -5,7 +5,7 @@ This is completely read-only: it sends the same discovery datagram the vendor's
 search tool sends, then prints the returned state and the camera's cloud
 registration request.
 
-    python3 camera_state.py 192.0.2.145
+    python3 camera_state.py 172.19.212.145
 """
 
 from __future__ import annotations

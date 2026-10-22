@@ -464,9 +464,12 @@ class Server:
         if not dev_id or not looks_like_dev_id(dev_id):
             return  # unparseable placeholder like "GET /api/userip.asp?"
         now = time.time()
+        iso, name = self.geoip_country(host) if host else ("", "")
         old = self.seen.get(dev_id)
         self.seen[dev_id] = {"last": now, "host": host or (old or {}).get("host", ""),
-                             "kind": kind}
+                             "kind": kind, "iso": old.get("iso", "") if old else ""}
+        if iso:
+            self.seen[dev_id]["iso"] = iso
         if now - self.save_seen > 60:
             self.save_seen = now
             self._write_seen()
@@ -489,18 +492,31 @@ class Server:
             if self.seen[dev_id]["last"] < cutoff:
                 del self.seen[dev_id]
 
-    def seen_stats(self) -> dict:
+    def public_stats(self) -> dict:
+        """No-IP public counters for /api/stats: totals plus a country ranking."""
         now = time.time()
-        windows = {"1h": 3600, "24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400}
-        out = {"cameras": {}, "phones": {}}
-        for key, span in windows.items():
-            out["cameras"][f"cameras_{key}"] = sum(
-                1 for e in self.seen.values()
-                if e["kind"] == "camera" and now - e["last"] < span)
-            out["phones"][f"phones_{key}"] = sum(
-                1 for e in self.seen.values()
-                if e["kind"] == "phone" and now - e["last"] < span)
-        return out
+        span = 30 * 86400
+        countries: dict[str, int] = {}
+        cameras_30d = 0
+        for entry in self.seen.values():
+            if entry["kind"] != "camera" or now - entry["last"] >= span:
+                continue
+            cameras_30d += 1
+            iso = entry.get("iso") or ""
+            if iso:
+                countries[iso] = countries.get(iso, 0) + 1
+        geo = _GEOIPS.get(getattr(self.args, "geoip_dir", ""))
+        names = getattr(geo, "names", {}) if geo else {}
+        ranking = [
+            {"code": iso, "flag": _iso_to_flag(iso), "name": names.get(iso, iso)}
+            for iso, _count in sorted(countries.items(), key=lambda kv: -kv[1])[:20]
+        ]
+        return {
+            "cameras_online": sum(1 for c in self.cameras.values()
+                                  if now - c.last_seen < 120),
+            "cameras_30d": cameras_30d,
+            "countries": ranking,  # index 0 = rank 1
+        }
 
     def learn_camera(self, dev_id: str, addr: tuple[str, int], msg_type: int, port: int = PORT_P2P):
         now = time.time()
@@ -630,6 +646,13 @@ class _GeoIP:
 _GEOIPS: dict[str, _GeoIP] = {}
 
 
+def _iso_to_flag(iso: str) -> str:
+    """ISO alpha-2 -> regional-indicator emoji flag; '' for unknown."""
+    if len(iso) != 2:
+        return ""
+    return "".join(chr(ord(c) + 0x1F1E6 - ord("A")) for c in iso.upper())
+
+
 def _dev_label(dev_id: str, address: str) -> str:
     """Escaped label set `{dev_id="...", address="..."}` for a metric line."""
     dev = dev_id.replace("\\", "").replace('"', "")
@@ -680,15 +703,11 @@ class AdminHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         # Public counters for usage.p2pipcam.com: no token, CORS enabled.
+        # Deliberately coarse: totals, online count, 30d count, country
+        # ranking. No addresses, device IDs, or session data.
         if path == "/api/stats":
-            stats = self.server.p2p.seen_stats()
-            snap = self.server.p2p.snapshot()
-            stats.update({
-                "cameras_online": sum(1 for c in snap["cameras"] if c["online"]),
-                "phones_active": sum(1 for s in snap["sessions"] if s["active"]),
-                "uptime_seconds": snap["uptime_seconds"],
-                "updated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            })
+            stats = self.server.p2p.public_stats()
+            stats["updated"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             body = json.dumps(stats, indent=2).encode()
             self._send(200, body + b"\n", "application/json",
                        {"Access-Control-Allow-Origin": "*"})

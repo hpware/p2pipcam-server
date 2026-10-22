@@ -40,7 +40,7 @@ power-cycle the camera and watch both logs.
 The live camera's state can be read without changing anything:
 
 ```sh
-python3 camera_state.py 192.0.2.145
+python3 camera_state.py 172.19.212.145
 ```
 
 `--public-host` must resolve to this machine from both the phone and the

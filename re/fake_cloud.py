@@ -3,7 +3,7 @@
 
 The camera sends this request (captured from its UDP 10139 state block):
 
-    GET /api/userip.asp?username=ABC54321&userpwd=...&vertype=906
+    GET /api/userip.asp?username=ADB01271&userpwd=...&vertype=906
         &language=0&dtype=0&tcpport=21870&lanip=192.168.30.49&
 
 The original server records the camera's public IP/port and probably returns
