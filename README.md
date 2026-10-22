@@ -1,5 +1,7 @@
 # p2pipcam replacement server
 
+English | [繁體中文](README.zh-TW.md)
+
 A dependency-free, self-hostable replacement for the dead `www.p2pipcam.com`
 cloud used by the old "P2P IP Cam Lite" / I-Bt IBT-200CP camera family.
 
